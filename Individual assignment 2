@@ -1,0 +1,84 @@
+function mod_pz_freq_imp
+    fig = figure('Name', 'Pole-Zero GUI', 'NumberTitle', 'off', 'Position', [150, 150, 1650, 600]);
+
+    ax_pz_plot = subplot(1, 3, 1, 'Parent', fig);
+    hold(ax_pz_plot, 'on');
+    grid(ax_pz_plot, 'on');
+    axis(ax_pz_plot, [-1.8 1.8 -1.8 1.8]);
+    xlabel(ax_pz_plot, 'Real');
+    ylabel(ax_pz_plot, 'Imaginary');
+    title(ax_pz_plot, 'Pole-Zero Diagram');
+
+    rectangle('Position', [-1 -1 2 2], 'Curvature', [1 1], 'EdgeColor', 'g', 'LineStyle', '-.');
+
+    ax_freq_plot = subplot(1, 3, 2, 'Parent', fig);
+    ax_imp_plot = subplot(1, 3, 3, 'Parent', fig);
+
+    poles_loc = [-0.2 - 0.4i; -0.2 + 0.4i];
+    zeros_loc = [-0.9; -0.9];
+
+    pole_points = plot(ax_pz_plot, real(poles_loc), imag(poles_loc), 'rx', 'MarkerSize', 8, 'LineWidth', 2);
+    zero_points = plot(ax_pz_plot, real(zeros_loc), imag(zeros_loc), 'go', 'MarkerSize', 8, 'LineWidth', 2);
+
+    [num, den] = zp2tf(zeros_loc, poles_loc, 1);
+    [fr_response, fr_val] = freqz(num, den, 1024, 48000);
+
+    plot(ax_freq_plot, fr_val, 20*log10(abs(fr_response)), 'r', 'LineWidth', 1.5);
+    grid(ax_freq_plot, 'on');
+    xlabel(ax_freq_plot, 'Frequency (Hz)');
+    ylabel(ax_freq_plot, 'Magnitude (dB)');
+    title(ax_freq_plot, 'Frequency Response');
+
+    [imp_resp, t_vals] = impz(num, den, 50);
+    stem(ax_imp_plot, t_vals, imp_resp, 'filled', 'r');
+    grid(ax_imp_plot, 'on');
+    xlim(ax_imp_plot, [0 30]); % Set x-axis limit to 30
+    xlabel(ax_imp_plot, 'Samples');
+    ylabel(ax_imp_plot, 'Amplitude');
+    title(ax_imp_plot, 'Impulse Response');
+
+    set(fig, 'WindowButtonDownFcn', @click_handler);
+
+    function click_handler(~, ~)
+        coord_data = get(ax_pz_plot, 'CurrentPoint');
+        pos_x = coord_data(1, 1);
+        pos_y = coord_data(1, 2);
+
+        [near_dist, near_idx] = min(abs([poles_loc; zeros_loc] - (pos_x + 1i*pos_y)));
+
+        if near_dist < 0.15
+            set(fig, 'WindowButtonMotionFcn', {@drag_action, near_idx});
+            set(fig, 'WindowButtonUpFcn', @stop_action);
+        end
+    end
+
+    function drag_action(~, ~, near_idx)
+        coord_data = get(ax_pz_plot, 'CurrentPoint');
+        pos_x = coord_data(1, 1);
+        pos_y = coord_data(1, 2);
+
+        if near_idx <= length(poles_loc)
+            poles_loc(near_idx) = pos_x + 1i*pos_y;
+        else
+            zeros_loc(near_idx - length(poles_loc)) = pos_x + 1i*pos_y;
+        end
+
+        set(pole_points, 'XData', real(poles_loc), 'YData', imag(poles_loc));
+        set(zero_points, 'XData', real(zeros_loc), 'YData', imag(zeros_loc));
+
+        [num, den] = zp2tf(zeros_loc, poles_loc, 1);
+        [fr_response, fr_val] = freqz(num, den, 1024, 48000);
+
+        set(findobj(ax_freq_plot, 'Type', 'line'), 'XData', fr_val, 'YData', 20*log10(abs(fr_response)), 'LineWidth', 1.5);
+
+        [imp_resp, t_vals] = impz(num, den, 50);
+        cla(ax_imp_plot);
+        stem(ax_imp_plot, t_vals, imp_resp, 'filled', 'r');
+        xlim(ax_imp_plot, [0 30]); % Maintain x-axis limit
+    end
+
+    function stop_action(~, ~)
+        set(fig, 'WindowButtonMotionFcn', '');
+        set(fig, 'WindowButtonUpFcn', '');
+    end
+end
